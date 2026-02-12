@@ -4,20 +4,34 @@ from supabase import create_client, Client
 import plotly.express as px
 import plotly.graph_objects as go
 import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (works locally with .env file)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available (e.g., on Streamlit Cloud), will use st.secrets instead
+    pass
 
 # Supabase connection
 st.set_page_config(page_title="Farmers Analytics", layout="wide")
 
 # Initialize Supabase client
 def init_supabase():
+    # Try environment variables first (local development)
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
+    
+    # If not found, try Streamlit secrets (Streamlit Cloud deployment)
     if not url or not key:
-        st.error("Please set SUPABASE_URL and SUPABASE_KEY in .env file")
+        try:
+            url = st.secrets["SUPABASE_URL"]
+            key = st.secrets["SUPABASE_KEY"]
+        except:
+            pass
+    
+    if not url or not key:
+        st.error("Please set SUPABASE_URL and SUPABASE_KEY in .env file or Streamlit secrets")
         st.stop()
     return create_client(url, key)
 
