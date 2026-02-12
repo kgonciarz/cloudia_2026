@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 from dotenv import load_dotenv
+from tomlkit import key
 
 # Load environment variables
 load_dotenv()
@@ -13,10 +14,10 @@ load_dotenv()
 st.set_page_config(page_title="Farmers Analytics", layout="wide")
 
 # Initialize Supabase client
-@st.cache_resource
+##@st.cache_resource
 def init_supabase():
-    url = st.secrets.get("SUPABASE_URL", "")
-    key = st.secrets.get("SUPABASE_KEY", "")
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_KEY")
     if not url or not key:
         st.error("Please set SUPABASE_URL and SUPABASE_KEY in Streamlit secrets")
         st.stop()
