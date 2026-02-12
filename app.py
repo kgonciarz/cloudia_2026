@@ -26,41 +26,38 @@ supabase = init_supabase()
 # Load data
 @st.cache_data(ttl=300)
 def load_data():
-    # Function to fetch all rows with pagination
-    def fetch_all_rows(table_name):
-        all_data = []
-        batch_size = 1000
+    # Function to fetch all rows with pagination (based on working example)
+    def load_data_batched(table_name, page_size=1000):
+        """Fetches data from a Supabase table in batches."""
         offset = 0
-        
-        while True:
-            # Fetch batch
-            response = supabase.table(table_name).select('*').limit(batch_size).offset(offset).execute()
-            data = response.data
-            
-            if not data or len(data) == 0:
-                break
-                
-            all_data.extend(data)
-            print(f"Fetched batch at offset {offset}: {len(data)} rows from {table_name}. Total: {len(all_data)}")
-            
-            # If we got less than batch_size rows, we've reached the end
-            if len(data) < batch_size:
-                break
-                
-            offset += batch_size
-        
-        print(f"✓ Total rows fetched from {table_name}: {len(all_data)}")
-        return all_data
+        all_rows = []
+        try:
+            while True:
+                result = supabase.table(table_name).select('*').range(offset, offset + page_size - 1).execute()
+                rows = result.data
+
+                if rows is None:
+                    st.error(f"Failed to fetch data from '{table_name}' — no data returned.")
+                    return pd.DataFrame()
+
+                if not rows:
+                    break
+
+                all_rows.extend(rows)
+                offset += page_size
+
+            return pd.DataFrame(all_rows)
+        except Exception as e:
+            st.error(f"An error occurred during batched data loading from '{table_name}': {e}")
+            return pd.DataFrame()
     
     # Get farmers data
     st.info("Loading farmers data...")
-    farmers_data = fetch_all_rows('farmers')
-    farmers_df = pd.DataFrame(farmers_data)
+    farmers_df = load_data_batched('farmers')
     
     # Get traceability data  
     st.info("Loading traceability data...")
-    trace_data = fetch_all_rows('traceability')
-    trace_df = pd.DataFrame(trace_data)
+    trace_df = load_data_batched('traceability')
     
     st.success(f"✓ Loaded {len(farmers_df)} farmers and {len(trace_df)} traceability records")
     
@@ -69,16 +66,26 @@ def load_data():
 try:
     farmers_df, trace_df = load_data()
     
-    # Aggregate net_weight_kg per farmer
+    # Standardize farmer_id in both dataframes (lowercase and trim)
+    farmers_df['farmer_id'] = farmers_df['farmer_id'].astype(str).str.strip().str.lower()
+    trace_df['farmer_id'] = trace_df['farmer_id'].astype(str).str.strip().str.lower()
+    
+    # Aggregate net_weight_kg per farmer - handle None values
     trace_agg = trace_df.groupby('farmer_id').agg({
         'net_weight_kg': 'sum',
-        'certification': lambda x: ', '.join(x.unique()),
+        'certification': lambda x: ', '.join([str(val) for val in x.dropna().unique() if str(val).strip() != '']),
         'exporter': 'first'
     }).reset_index()
+    
+    # Replace empty strings with 'Unknown'
+    trace_agg['certification'] = trace_agg['certification'].replace('', 'Unknown')
+    trace_agg['exporter'] = trace_agg['exporter'].fillna('Unknown')
     
     # Left join farmers with aggregated traceability
     merged_df = farmers_df.merge(trace_agg, on='farmer_id', how='left')
     merged_df['net_weight_kg'] = merged_df['net_weight_kg'].fillna(0)
+    merged_df['certification'] = merged_df['certification'].fillna('Unknown')
+    merged_df['exporter'] = merged_df['exporter'].fillna('Unknown')
     
     # Calculate percentage delivered
     merged_df['delivery_percentage'] = (merged_df['net_weight_kg'] / merged_df['max_quota_kg'] * 100).round(2)
@@ -103,10 +110,34 @@ try:
     # Main title
     st.title("🌾 Farmers Delivery Analytics Dashboard")
     
+    # Debug info - show raw totals before filtering
+    with st.expander("📊 Debug Info - Raw Data Totals (before filters)", expanded=True):
+        st.write(f"**Raw Farmers Count:** {len(farmers_df)}")
+        st.write(f"**Raw Traceability Records:** {len(trace_df)}")
+        st.write(f"**Raw Total Net Weight (all traceability):** {trace_df['net_weight_kg'].sum():,.2f} kg")
+        
+        st.write("---")
+        st.write("**🔍 Duplicate Check:**")
+        duplicate_farmers = farmers_df['farmer_id'].duplicated().sum()
+        st.write(f"⚠️  Duplicate farmer_ids in FARMERS table: **{duplicate_farmers}**")
+        
+        st.write("---")
+        st.write(f"**Merged Data Rows:** {len(merged_df)}")
+        st.write(f"**Merged Total Net Weight:** {merged_df['net_weight_kg'].sum():,.2f} kg")
+        st.write(f"**Farmers after merge:** {merged_df['farmer_id'].nunique()}")
+        
+        inflation = merged_df['net_weight_kg'].sum() - trace_df['net_weight_kg'].sum()
+        if inflation > 0:
+            st.error(f"⚠️  DATA INFLATION: {inflation:,.2f} kg ({(inflation/trace_df['net_weight_kg'].sum()*100):.2f}%) - likely due to duplicate farmer_ids in farmers table!")
+        elif inflation < 0:
+            st.warning(f"⚠️  DATA LOSS: {abs(inflation):,.2f} kg ({(abs(inflation)/trace_df['net_weight_kg'].sum()*100):.2f}%)")
+        else:
+            st.success("✓ No data inflation or loss")
+    
     # Key Metrics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total Farmers", len(filtered_df))
+        st.metric("Total Farmers", filtered_df['farmer_id'].str.lower().nunique())
     with col2:
         st.metric("Total Max Quota (kg)", f"{filtered_df['max_quota_kg'].sum():,.0f}")
     with col3:
