@@ -186,9 +186,16 @@ try:
     cert_col1, cert_col2 = st.columns(2)
     
     with cert_col1:
-        # By cooperative and certification
-        cert_coop = trace_df.merge(farmers_df[['farmer_id', 'cooperative']], on='farmer_id', how='left')
-        cert_coop_summary = cert_coop.groupby(['cooperative', 'certification'])['net_weight_kg'].sum().reset_index()
+        # By cooperative and certification - use filtered data
+        # Get farmer_ids from filtered_df and join back to trace_df to get certification details
+        filtered_farmer_ids = filtered_df['farmer_id'].unique()
+        cert_coop_filtered = trace_df[trace_df['farmer_id'].isin(filtered_farmer_ids)].copy()
+        cert_coop_filtered = cert_coop_filtered.merge(
+            filtered_df[['farmer_id', 'cooperative']], 
+            on='farmer_id', 
+            how='left'
+        )
+        cert_coop_summary = cert_coop_filtered.groupby(['cooperative', 'certification'])['net_weight_kg'].sum().reset_index()
         
         fig5 = px.bar(cert_coop_summary, x='cooperative', y='net_weight_kg', color='certification',
                      title='Delivery by Cooperative and Certification',
@@ -196,8 +203,9 @@ try:
         st.plotly_chart(fig5, use_container_width=True)
     
     with cert_col2:
-        # By exporter and certification
-        cert_exp_summary = trace_df.groupby(['exporter', 'certification'])['net_weight_kg'].sum().reset_index()
+        # By exporter and certification - use filtered data
+        cert_exp_filtered = trace_df[trace_df['farmer_id'].isin(filtered_farmer_ids)].copy()
+        cert_exp_summary = cert_exp_filtered.groupby(['exporter', 'certification'])['net_weight_kg'].sum().reset_index()
         
         fig6 = px.bar(cert_exp_summary, x='exporter', y='net_weight_kg', color='certification',
                      title='Delivery by Exporter and Certification',
