@@ -29,27 +29,25 @@ def load_data():
     # Function to fetch all rows with pagination
     def fetch_all_rows(table_name):
         all_data = []
-        page_size = 999  # Use 999 to be safe
-        page = 0
+        batch_size = 1000
+        offset = 0
         
         while True:
-            start = page * page_size
-            end = start + page_size - 1
-            
-            response = supabase.table(table_name).select('*').range(start, end).execute()
+            # Fetch batch
+            response = supabase.table(table_name).select('*').limit(batch_size).offset(offset).execute()
             data = response.data
             
             if not data or len(data) == 0:
                 break
                 
             all_data.extend(data)
-            print(f"Page {page + 1}: Fetched {len(data)} rows from {table_name}. Total so far: {len(all_data)}")
+            print(f"Fetched batch at offset {offset}: {len(data)} rows from {table_name}. Total: {len(all_data)}")
             
-            # If we got less than page_size rows, we've reached the end
-            if len(data) < page_size:
+            # If we got less than batch_size rows, we've reached the end
+            if len(data) < batch_size:
                 break
                 
-            page += 1
+            offset += batch_size
         
         print(f"✓ Total rows fetched from {table_name}: {len(all_data)}")
         return all_data
