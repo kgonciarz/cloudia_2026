@@ -110,30 +110,6 @@ try:
     # Main title
     st.title("🌾 Farmers Delivery Analytics Dashboard")
     
-    # Debug info - show raw totals before filtering
-    with st.expander("📊 Debug Info - Raw Data Totals (before filters)", expanded=True):
-        st.write(f"**Raw Farmers Count:** {len(farmers_df)}")
-        st.write(f"**Raw Traceability Records:** {len(trace_df)}")
-        st.write(f"**Raw Total Net Weight (all traceability):** {trace_df['net_weight_kg'].sum():,.2f} kg")
-        
-        st.write("---")
-        st.write("**🔍 Duplicate Check:**")
-        duplicate_farmers = farmers_df['farmer_id'].duplicated().sum()
-        st.write(f"⚠️  Duplicate farmer_ids in FARMERS table: **{duplicate_farmers}**")
-        
-        st.write("---")
-        st.write(f"**Merged Data Rows:** {len(merged_df)}")
-        st.write(f"**Merged Total Net Weight:** {merged_df['net_weight_kg'].sum():,.2f} kg")
-        st.write(f"**Farmers after merge:** {merged_df['farmer_id'].nunique()}")
-        
-        inflation = merged_df['net_weight_kg'].sum() - trace_df['net_weight_kg'].sum()
-        if inflation > 0:
-            st.error(f"⚠️  DATA INFLATION: {inflation:,.2f} kg ({(inflation/trace_df['net_weight_kg'].sum()*100):.2f}%) - likely due to duplicate farmer_ids in farmers table!")
-        elif inflation < 0:
-            st.warning(f"⚠️  DATA LOSS: {abs(inflation):,.2f} kg ({(abs(inflation)/trace_df['net_weight_kg'].sum()*100):.2f}%)")
-        else:
-            st.success("✓ No data inflation or loss")
-    
     # Key Metrics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
