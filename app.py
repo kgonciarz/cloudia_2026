@@ -5,7 +5,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 from dotenv import load_dotenv
-from tomlkit import key
 
 # Load environment variables
 load_dotenv()
@@ -14,12 +13,11 @@ load_dotenv()
 st.set_page_config(page_title="Farmers Analytics", layout="wide")
 
 # Initialize Supabase client
-##@st.cache_resource
 def init_supabase():
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
     if not url or not key:
-        st.error("Please set SUPABASE_URL and SUPABASE_KEY in Streamlit secrets")
+        st.error("Please set SUPABASE_URL and SUPABASE_KEY in .env file")
         st.stop()
     return create_client(url, key)
 
@@ -28,13 +26,36 @@ supabase = init_supabase()
 # Load data
 @st.cache_data(ttl=300)
 def load_data():
+    # Function to fetch all rows with pagination
+    def fetch_all_rows(table_name):
+        all_data = []
+        page_size = 1000
+        offset = 0
+        
+        while True:
+            response = supabase.table(table_name).select('*').range(offset, offset + page_size - 1).execute()
+            data = response.data
+            
+            if not data:
+                break
+                
+            all_data.extend(data)
+            
+            # If we got less than page_size rows, we've reached the end
+            if len(data) < page_size:
+                break
+                
+            offset += page_size
+        
+        return all_data
+    
     # Get farmers data
-    farmers_response = supabase.table('farmers').select('*').execute()
-    farmers_df = pd.DataFrame(farmers_response.data)
+    farmers_data = fetch_all_rows('farmers')
+    farmers_df = pd.DataFrame(farmers_data)
     
     # Get traceability data
-    trace_response = supabase.table('traceability').select('*').execute()
-    trace_df = pd.DataFrame(trace_response.data)
+    trace_data = fetch_all_rows('traceability')
+    trace_df = pd.DataFrame(trace_data)
     
     return farmers_df, trace_df
 
