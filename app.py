@@ -3,6 +3,11 @@ import pandas as pd
 from supabase import create_client, Client
 import plotly.express as px
 import plotly.graph_objects as go
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Supabase connection
 st.set_page_config(page_title="Farmers Analytics", layout="wide")
