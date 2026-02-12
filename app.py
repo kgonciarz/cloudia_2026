@@ -29,33 +29,42 @@ def load_data():
     # Function to fetch all rows with pagination
     def fetch_all_rows(table_name):
         all_data = []
-        page_size = 1000
-        offset = 0
+        page_size = 999  # Use 999 to be safe
+        page = 0
         
         while True:
-            response = supabase.table(table_name).select('*').range(offset, offset + page_size - 1).execute()
+            start = page * page_size
+            end = start + page_size - 1
+            
+            response = supabase.table(table_name).select('*').range(start, end).execute()
             data = response.data
             
-            if not data:
+            if not data or len(data) == 0:
                 break
                 
             all_data.extend(data)
+            print(f"Page {page + 1}: Fetched {len(data)} rows from {table_name}. Total so far: {len(all_data)}")
             
             # If we got less than page_size rows, we've reached the end
             if len(data) < page_size:
                 break
                 
-            offset += page_size
+            page += 1
         
+        print(f"✓ Total rows fetched from {table_name}: {len(all_data)}")
         return all_data
     
     # Get farmers data
+    st.info("Loading farmers data...")
     farmers_data = fetch_all_rows('farmers')
     farmers_df = pd.DataFrame(farmers_data)
     
-    # Get traceability data
+    # Get traceability data  
+    st.info("Loading traceability data...")
     trace_data = fetch_all_rows('traceability')
     trace_df = pd.DataFrame(trace_data)
+    
+    st.success(f"✓ Loaded {len(farmers_df)} farmers and {len(trace_df)} traceability records")
     
     return farmers_df, trace_df
 
