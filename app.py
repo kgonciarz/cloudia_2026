@@ -14,7 +14,7 @@ except ImportError:
     pass
 
 # Supabase connection
-st.set_page_config(page_title="Farmers Analytics", layout="wide")
+st.set_page_config(page_title="CloudAI 2026 Summary", layout="wide")
 
 # Initialize Supabase client
 def init_supabase():
