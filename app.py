@@ -4,7 +4,7 @@ from supabase import create_client, Client
 import plotly.express as px
 import plotly.graph_objects as go
 import os
-import hashlib
+import bcrypt
 
 # Load environment variables (works locally with .env file)
 try:
@@ -35,31 +35,22 @@ supabase = init_supabase()
 
 # ── Authentication helpers ───────────────────────────────────────────────────
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password(password: str) -> bytes:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
-@st.cache_data(ttl=60)
-def get_distinct_cooperatives():
-    """Pull distinct cooperative names from the farmers table."""
+def verify_password(password: str, hashed: str) -> bool:
     try:
-        result = supabase.table('farmers').select('cooperative').execute()
-        coops = sorted(set(
-            row['cooperative'] for row in result.data
-            if row.get('cooperative')
-        ))
-        return coops
-    except Exception as e:
-        st.error(f"Could not load cooperatives: {e}")
-        return []
+        return bcrypt.checkpw(password.encode(), hashed.encode())
+    except Exception:
+        return False
 
 def authenticate(username: str, password: str):
     """
     Returns (success: bool, user_row: dict | None).
-    Accepts both plain-text and SHA-256-hashed passwords stored in the users table.
-    Expected columns: username, password, cooperative, role
+    Table columns: username, password_hash, cooperative_name, role (optional)
     """
     try:
-        result = supabase.table('users').select('*').eq('username', username).execute()
+        result = supabase.table('users').select('*').eq('username', username.strip()).execute()
     except Exception as e:
         st.error(f"Could not query users table: {e}")
         return False, None
@@ -68,19 +59,19 @@ def authenticate(username: str, password: str):
         return False, None
 
     user = result.data[0]
-    stored_pw = user.get('password', '')
+    stored_hash = user.get('password_hash', '')
 
-    # Accept plain-text OR hashed password
-    if stored_pw == password or stored_pw == hash_password(password):
+    if verify_password(password, stored_hash):
         return True, user
 
     return False, None
 
 def update_password(username: str, new_password: str):
-    """Store hashed password back to users table."""
+    """Store new bcrypt-hashed password in users table."""
     try:
+        new_hash = hash_password(new_password).decode()
         supabase.table('users').update(
-            {'password': hash_password(new_password)}
+            {'password_hash': new_hash}
         ).eq('username', username).execute()
         return True
     except Exception as e:
@@ -122,8 +113,8 @@ if not st.session_state['authenticated']:
 # ── From here on: user is authenticated ─────────────────────────────────────
 
 current_user = st.session_state['user']
-current_role = current_user.get('role', 'coop')          # 'admin' or 'coop'
-current_coop = current_user.get('cooperative', '')        # cooperative name for coop users
+current_role = current_user.get('role', 'coop')               # 'admin' or 'coop'
+current_coop = (current_user.get('cooperative_name') or '').strip()  # cooperative name for coop users
 
 # ── Sidebar: user info + password change + logout ────────────────────────────
 
