@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 import bcrypt
+import extra_streamlit_components as stx
 
 # Load environment variables (works locally with .env file)
 try:
@@ -32,6 +33,14 @@ def init_supabase():
     return create_client(url, key)
 
 supabase = init_supabase()
+
+# ── Cookie manager (for "stay signed in") ────────────────────────────────────
+
+@st.cache_resource
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
 
 # ── Authentication helpers ───────────────────────────────────────────────────
 
@@ -85,6 +94,7 @@ def show_login():
     with st.form("login_form"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
+        remember = st.checkbox("Stay signed in")
         submitted = st.form_submit_button("Login")
 
     if submitted:
@@ -95,6 +105,8 @@ def show_login():
         if success:
             st.session_state['authenticated'] = True
             st.session_state['user'] = user
+            if remember:
+                cookie_manager.set('cloudia_user', user.get('username'), max_age=30*24*3600)
             st.rerun()
         else:
             st.error("Invalid username or password.")
@@ -106,6 +118,18 @@ if 'authenticated' not in st.session_state:
 if 'user' not in st.session_state:
     st.session_state['user'] = None
 
+# Auto-login from cookie if available
+if not st.session_state['authenticated']:
+    saved_username = cookie_manager.get('cloudia_user')
+    if saved_username:
+        try:
+            result = supabase.table('users').select('*').eq('username', saved_username).execute()
+            if result.data:
+                st.session_state['authenticated'] = True
+                st.session_state['user'] = result.data[0]
+        except:
+            pass
+
 if not st.session_state['authenticated']:
     show_login()
     st.stop()
@@ -113,8 +137,8 @@ if not st.session_state['authenticated']:
 # ── From here on: user is authenticated ─────────────────────────────────────
 
 current_user = st.session_state['user']
-current_role = current_user.get('role', 'coop')               # 'admin' or 'coop'
-current_coop = (current_user.get('cooperative_name') or '').strip()  # cooperative name for coop users
+current_coop = (current_user.get('cooperative_name') or '').strip()
+current_role = current_user.get('role') or ('admin' if not current_coop else 'coop')
 
 # ── Sidebar: user info + password change + logout ────────────────────────────
 
@@ -143,6 +167,7 @@ with st.sidebar:
 
     st.divider()
     if st.button("Logout"):
+        cookie_manager.delete('cloudia_user')
         st.session_state['authenticated'] = False
         st.session_state['user'] = None
         st.rerun()

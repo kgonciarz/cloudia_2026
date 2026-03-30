@@ -4,3 +4,4 @@ supabase
 plotly
 python-dotenv
 bcrypt
+extra-streamlit-components
